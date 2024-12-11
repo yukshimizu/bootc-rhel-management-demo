@@ -237,7 +237,7 @@ Above job templates are acutually configured as separate workflow templates for 
 
 6. Click `Save` button.
 7. Click `Survery` tab and click `Add` button.
-8. Add the following two surveys and enable them:
+8. Add the following nine surveys and enable them:
     - Bootc Image Name
         - Type: text
         - Answer variable name: `bootc_image_name`
@@ -286,7 +286,7 @@ NOTE: Although `xxx_passwd` should be encrypted in production, using vault for e
 
 6. Click `Save` button.
 7. Click `Survery` tab and click `Add` button.
-8. Add the following two surveys and enable them:
+8. Add the following eight surveys and enable them:
     - Bootc Image Name
         - Type: text
         - Answer variable name: `bootc_image_name`
