@@ -233,7 +233,7 @@ Above job templates are acutually configured as separate workflow templates for 
 3. Click `Save` button.
 4. Click `Start` and launch Visualizer.
 5. Configure the workflow template as follows:
-
+<img width="1914" alt="workflow1" src="https://github.com/user-attachments/assets/c54b2c02-661f-4a5a-a895-75566b7f2cbc">
 6. Click `Save` button.
 7. Click `Survery` tab and click `Add` button.
 8. Add the following two surveys and enable them:
@@ -281,7 +281,7 @@ NOTE: Although `xxx_passwd` should be encrypted in production, using vault for e
 3. Click `Save` button.
 4. Click `Start` and launch Visualizer.
 5. Configure the workflow template as follows:
-
+<img width="1913" alt="workflow2" src="https://github.com/user-attachments/assets/281d86f6-96fe-4a5d-aac8-f927d208a8d5">
 6. Click `Save` button.
 7. Click `Survery` tab and click `Add` button.
 8. Add the following two surveys and enable them:
