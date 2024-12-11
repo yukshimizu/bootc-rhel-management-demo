@@ -1,0 +1,25 @@
+---
+- name: Update the VM
+  hosts: "{{ target_host }}"
+  gather_facts: false
+  become: true
+  remote_user: cloud-user
+
+  tasks:
+    - name: Fail if variables not defined
+      ansible.builtin.assert:
+        that:
+          - bootc_remote_registry is defined
+          - bootc_image_name is defined
+          - bootc_image_tag is defined
+          - bootc_page_title is defined
+
+        fail_msg: "Required variables not set"
+
+    - name: Provide image to switch to a different image and retain the current running image
+      community.general.bootc_manage:
+        state: switch
+        image: "{{ bootc_remote_registry }}/{{ bootc_image_name }}:{{ bootc_image_tag }}"
+
+    - name: Unconditionally reboot the machine with all defaults
+      ansible.builtin.reboot:

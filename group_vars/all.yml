@@ -1,0 +1,17 @@
+---
+aws_region: ap-northeast-1 # needs to be aligned with your environment's creation
+aws_bootc_instance_ami: rhel9-bootc-x86 # adjust with your preference
+aws_bootc_instance_size: t2.small # can be bigger instance size
+aws_s3_bucket: rhel9-bootc # needs to be aligned with your environment's creation
+aws_vpc: demo_vpc # needs to be aligned with your environment's creation
+aws_vpc_subnet_name: demo_subnet # needs to be aligned with your environment's creation
+aws_securitygroup_name: demo_sg # needs to be aligned with your environment's creation
+
+purpose: demo # should not be modified
+
+bootc_build_dir: "/home/ec2-user/bootc" # should not be modified
+bootc_test_container: "rhel9-bootc" # adjust with your preference
+bootc_builder_image: "registry.redhat.io/rhel9/bootc-image-builder:latest" # should not be modified
+bootc_vm_type: bootc # should not be modified
+bootc_vm_name: bootc01 # should not be modified
+bootc_vm_environment: apdb # should not be modified

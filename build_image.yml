@@ -1,0 +1,95 @@
+---
+- name: Build and push an image
+  hosts: tag_Name_builder01
+  gather_facts: false
+  remote_user: ec2-user
+
+  tasks:
+    - name: Fail if variables not defined
+      ansible.builtin.assert:
+        that:
+          - bootc_builder_image is defined
+          - bootc_build_dir is defined
+          - bootc_image_name is defined
+          - bootc_image_tag is defined
+          - bootc_page_title is defined
+          - bootc_test_container is defined
+          - bootc_remote_registry is defined
+          - rhsm_username is defined
+          - rhsm_passwd is defined
+          - registry_username is defined
+          - registry_passwd is defined
+
+        fail_msg: "Required variables not set"
+
+    - name: Create a directory if it does not exist
+      ansible.builtin.file:
+        path: "{{ bootc_build_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Copy the Containerfile
+      ansible.builtin.copy:
+        src: Containerfile
+        dest: "{{ bootc_build_dir }}"
+        mode: '0644'
+
+    - name: Build a RHEL image
+      containers.podman.podman_image:
+        name: "{{ bootc_image_name }}"
+        tag: "{{ bootc_image_tag }}"
+        path: "{{ bootc_build_dir }}"
+        username: "{{ rhsm_username }}"
+        password: "{{ rhsm_passwd }}"
+
+    - name: Run the container
+      containers.podman.podman_container:
+        name: "{{ bootc_test_container }}"
+        image: "{{ bootc_image_name }}:{{ bootc_image_tag }}"
+        state: started
+        ports:
+          - "8080:80"
+        recreate: true
+
+    - name: Waits for port 8080 of any IP to close active connections, don't start checking for 10 seconds
+      ansible.builtin.wait_for:
+        host: 0.0.0.0
+        port: 8080
+        delay: 10
+        state: drained
+
+    - name: GET the default page
+      ansible.builtin.uri:
+        url: "http://localhost:8080"
+        method: GET
+        status_code: 200
+        return_content: true
+      register: default_page
+
+    - name: Display the page
+      ansible.builtin.debug:
+        msg: "{{ default_page }}"
+
+    - name: Check for the site name supplied in config
+      ansible.builtin.fail:
+        msg: "Site Check Failed - could not access default weblog {{ bootc_page_title }}"
+      when: default_page.content is not search(bootc_page_title)
+
+    - name: Test results
+      ansible.builtin.debug:
+        msg: "All tests succeeded."
+
+    - name: Stop and delete the container
+      containers.podman.podman_container:
+        name: "{{ bootc_test_container }}"
+        state: absent
+
+    - name: Push the container image to registry
+      containers.podman.podman_image:
+        name: "{{ bootc_image_name }}"
+        tag: "{{ bootc_image_tag }}"
+        push: true
+        push_args:
+          dest: "{{ bootc_remote_registry }}/{{ bootc_image_name }}:{{ bootc_image_tag }}"
+        username: "{{ registry_username }}"
+        password: "{{ registry_passwd }}"

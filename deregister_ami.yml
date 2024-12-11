@@ -1,0 +1,35 @@
+---
+- name: Deregister the AMI
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Fail if variables not defined
+      ansible.builtin.assert:
+        that:
+          - aws_region is defined
+          - aws_bootc_instance_ami is defined
+        fail_msg: "Required variables not set"
+
+    - name: Gather information about AMI with AMI name equal to "{{ aws_bootc_instance_ami }}"
+      amazon.aws.ec2_ami_info:
+        region: "{{ aws_region }}"
+        filters:
+          "name": "{{ aws_bootc_instance_ami }}"
+      register: aws_ami_info
+
+    - name: Output the existing AMI
+      ansible.builtin.debug:
+        msg:
+          - "The AMI looks like already existing. Try deleting the AMI."
+          - "AMI ID: {{ aws_ami_info.images[0].image_id }}"
+      when: aws_ami_info.images is defined and aws_ami_info.images | length > 0
+
+    - name: Deregister the existing AMI
+      amazon.aws.ec2_ami:
+        region: "{{ aws_region }}"
+        image_id: "{{ aws_ami_info.images[0].image_id }}"
+        delete_snapshot: false
+        state: absent
+      when: aws_ami_info.images is defined and aws_ami_info.images | length > 0

@@ -1,0 +1,5 @@
+---
+collections:
+  - amazon.aws
+  - containers.podman
+  - community.general

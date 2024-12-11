@@ -1,0 +1,79 @@
+---
+- name: Create an AMI from the container image
+  hosts: tag_Name_builder01
+  gather_facts: false
+  become: true
+  remote_user: ec2-user
+
+  vars:
+    bootc_image: "{{ bootc_remote_registry }}/{{ bootc_image_name }}:{{ bootc_image_tag }}"
+
+  tasks:
+    - name: Fail if variables not defined
+      ansible.builtin.assert:
+        that:
+          - aws_bootc_instance_ami
+          - aws_region
+          - bootc_image is defined
+          - bootc_builder_image is defined
+          - aws_region is defined
+          - aws_bootc_instance_ami is defined
+          - aws_s3_bucket is defined
+          - rhsm_username is defined
+          - rhsm_passwd is defined
+          - registry_username is defined
+          - registry_passwd is defined
+
+        fail_msg: "Required variables not set"
+
+    - name: Gather information about AMI with AMI name equal to "{{ aws_bootc_instance_ami }}"
+      delegate_to: localhost
+      amazon.aws.ec2_ami_info:
+        region: "{{ aws_region }}"
+        filters:
+          "name": "{{ aws_bootc_instance_ami }}"
+      register: aws_ami_info
+
+    - name: Output the existing AMI
+      ansible.builtin.debug:
+        msg:
+          - "The AMI looks like already existing. Please check the AMI."
+          - "AMI ID: {{ aws_ami_info.images[0].image_id }}"
+      when: aws_ami_info.images is defined and aws_ami_info.images | length > 0
+
+    - name: Create the AMI
+      when: aws_ami_info.images | length == 0
+      block:
+        - name: Pull the image-builder beforehand
+          containers.podman.podman_image:
+            name: "{{ bootc_builder_image }}"
+            force: true
+            username: "{{ rhsm_username }}"
+            password: "{{ rhsm_passwd }}"
+
+        - name: Pull the bootc container image beforehand
+          containers.podman.podman_image:
+            name: "{{ bootc_image }}"
+            force: true
+            username: "{{ registry_username }}"
+            password: "{{ registry_passwd }}"
+
+        - name: Createf an AMI from the bootc container image
+          containers.podman.podman_container:
+            name: bootc-image-builder
+            detach: false
+            image: "{{ bootc_builder_image }}"
+            interactive: true
+            privileged: true
+            pull: "never"
+            rm: true
+            rmi: true
+            tty: true
+            volumes:
+              - "/var/lib/containers/storage:/var/lib/containers/storage"
+            env:
+              AWS_PROFILE: "default"
+              AWS_ACCESS_KEY_ID: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
+              AWS_SECRET_ACCESS_KEY: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
+            command: "--type ami --aws-ami-name {{ aws_bootc_instance_ami }} --aws-bucket {{ aws_s3_bucket }}\ --aws-region {{ aws_region }} --local {{ bootc_image }}"
+            recreate: true

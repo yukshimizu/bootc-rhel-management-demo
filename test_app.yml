@@ -1,0 +1,55 @@
+---
+- name: Test the application of the restarted instances
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Fail if variables not defined
+      ansible.builtin.assert:
+        that:
+          - aws_region is defined
+          - bootc_vm_name is defined
+          - bootc_vm_environment is defined
+          - bootc_page_title is defined
+
+        fail_msg: "Required variables not set"
+
+    - name: Gather the demo instances' information
+      amazon.aws.ec2_instance_info:
+        filters:
+          "tag:purpose": "{{ purpose }}"
+          "tag:Name": "{{ bootc_vm_name }}"
+          "tag:environment": "{{ bootc_vm_environment }}"
+          instance-state-name:
+            - running
+        region: "{{ aws_region }}"
+      register: target_vms
+
+    - name: "Test the application"
+      ansible.builtin.debug:
+        msg: "Performing Test"
+
+    - name: GET the default web page
+      ansible.builtin.uri:
+        url: "http://{{ item.public_dns_name }}"
+        method: GET
+        status_code: 200
+        return_content: true
+      register: default_page
+      loop: "{{ target_vms.instances }}"
+      when: target_vms.instances is defined and target_vms.instances | length > 0
+
+    - name: Display the page
+      ansible.builtin.debug:
+        msg: "{{ default_page }}"
+
+    - name: Check for the site name supplied in config
+      ansible.builtin.fail:
+        msg: "Site Check Failed - could not access default web {{ bootc_page_title }}"
+      when: item.content is not search(bootc_page_title)
+      loop: "{{ default_page.results }}"
+
+    - name: Test results
+      ansible.builtin.debug:
+        msg: "All tests succeeded."
