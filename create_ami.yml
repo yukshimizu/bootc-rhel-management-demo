@@ -58,7 +58,7 @@
             username: "{{ registry_username }}"
             password: "{{ registry_passwd }}"
 
-        - name: Createf an AMI from the bootc container image
+        - name: Create an AMI from the bootc container image
           containers.podman.podman_container:
             name: bootc-image-builder
             detach: false
