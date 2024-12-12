@@ -118,6 +118,7 @@ Please refer to [Ansible Doc](https://docs.ansible.com/automation-controller/lat
    - Execution Environment: `Default execution environment`
    - Source Control Type: `Git`
    - Source Control URL: your git repositoriy
+   - Options: `Update Revision on Launch`
 4. Click `Save` button
 
 Please refer to [Ansible Doc](https://docs.ansible.com/automation-controller/latest/html/userguide/projects.html#add-a-new-project) for more details.
