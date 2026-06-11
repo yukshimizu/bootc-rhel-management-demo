@@ -3,7 +3,7 @@
   hosts: tag_Name_builder01
   gather_facts: false
   become: true
-  remote_user: ec2-user
+  remote_user: "{{ ansible_user }}"
 
   vars:
     bootc_image: "{{ bootc_remote_registry }}/{{ bootc_image_name }}:{{ bootc_image_tag }}"

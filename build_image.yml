@@ -2,7 +2,7 @@
 - name: Build and push an image
   hosts: tag_Name_builder01
   gather_facts: false
-  remote_user: ec2-user
+  remote_user: "{{ ansible_user }}"
 
   tasks:
     - name: Fail if variables not defined
