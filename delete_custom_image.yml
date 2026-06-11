@@ -1,0 +1,58 @@
+---
+# ---------------------------------------------------------------------------
+# delete_custom_image.yml — Delete an OCI Custom Image
+#                           (OCI equivalent of deregister_ami.yml)
+#
+# Runs from localhost (the Ansible Automation Controller).
+# Required collections:
+#   - oracle.oci
+# ---------------------------------------------------------------------------
+
+- name: Delete the OCI Custom Image
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+
+  pre_tasks:
+    - name: Setup OCI config
+      ansible.builtin.include_tasks: tasks/setup_oci_config.yml
+
+  post_tasks:
+    - name: Cleanup OCI config
+      ansible.builtin.include_tasks: tasks/cleanup_oci_config.yml
+
+  tasks:
+    - name: Fail if required variables are not defined
+      ansible.builtin.assert:
+        that:
+          - oci_region is defined
+          - oci_compartment_id is defined
+          - oci_bootc_instance_image_name is defined
+        fail_msg: "Required variables not set"
+
+    - name: Gather Custom Image info for "{{ oci_bootc_instance_image_name }}"
+      oracle.oci.oci_compute_image_facts:
+        compartment_id: "{{ oci_compartment_id }}"
+        display_name: "{{ oci_bootc_instance_image_name }}"
+        region: "{{ oci_region }}"
+      register: oci_image_info
+
+    - name: Report image found
+      ansible.builtin.debug:
+        msg:
+          - "Custom Image found — attempting deletion."
+          - "Image OCID: {{ oci_image_info.images[0].id }}"
+      when: oci_image_info.images is defined and oci_image_info.images | length > 0
+
+    - name: Delete the Custom Image
+      oracle.oci.oci_compute_image:
+        image_id: "{{ oci_image_info.images[0].id }}"
+        state: absent
+        region: "{{ oci_region }}"
+      when: oci_image_info.images is defined and oci_image_info.images | length > 0
+
+    - name: Report if no image was found
+      ansible.builtin.debug:
+        msg: "Custom Image '{{ oci_bootc_instance_image_name }}' was not found. Nothing to delete."
+      when: oci_image_info.images | length == 0

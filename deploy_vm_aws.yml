@@ -15,7 +15,6 @@
           - aws_bootc_instance_size is defined
           - aws_keypair_name is defined
           - bootc_vm_name is defined
-          - bootc_vm_environment is defined
           - bootc_vm_type is defined
           - purpose is defined
         fail_msg: "Required variables not set"
@@ -24,7 +23,6 @@
       amazon.aws.ec2_instance_info:
         filters:
           "tag:Name": "{{ bootc_vm_name }}"
-          "tag:environment": "{{ bootc_vm_environment }}"
           "tag:type": "{{ bootc_vm_type }}"
           "tag:purpose": "{{ purpose }}"
           instance-state-name:
@@ -78,7 +76,6 @@
             security_group: "{{ aws_securitygroup_name }}"
             tags:
               Name: "{{ bootc_vm_name }}"
-              environment: "{{ bootc_vm_environment }}"
               type: "{{ bootc_vm_type }}"
               purpose: "{{ purpose }}"
             volumes:

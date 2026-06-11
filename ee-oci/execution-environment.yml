@@ -1,0 +1,20 @@
+---
+# Build file of EE for OCI
+ 
+version: 3
+dependencies:
+  galaxy:
+    collections:
+      - name: oracle.oci
+  python:
+    - oci
+  system: []
+images:
+  base_image:
+    name: registry.redhat.io/ansible-automation-platform-26/ee-minimal-rhel9:2.0-1777387537
+additional_build_steps:
+  append_final:
+    - RUN python3.12 -m pip install oci --upgrade
+    - RUN python3.12 -m venv /opt/oci-cli-venv
+      && /opt/oci-cli-venv/bin/pip install oci-cli
+      && ln -s /opt/oci-cli-venv/bin/oci /usr/local/bin/oci

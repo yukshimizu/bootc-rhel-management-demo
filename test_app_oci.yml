@@ -1,0 +1,102 @@
+---
+# ---------------------------------------------------------------------------
+# test_app_oci.yml — Test the application running on the deployed bootc VM
+#                (OCI equivalent of test_app.yml)
+#
+# Runs from localhost. Uses the OCI compute instance facts to discover the
+# public IP of the bootc VM, then performs an HTTP GET to verify the page.
+# Required collections:
+#   - oracle.oci
+# ---------------------------------------------------------------------------
+
+- name: Test the application of the deployed bootc instances
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  pre_tasks:
+    - name: Setup OCI config
+      ansible.builtin.include_tasks: tasks/setup_oci_config.yml
+
+  post_tasks:
+    - name: Cleanup OCI config
+      ansible.builtin.include_tasks: tasks/cleanup_oci_config.yml
+
+  tasks:
+    - name: Fail if required variables are not defined
+      ansible.builtin.assert:
+        that:
+          - oci_region is defined
+          - oci_compartment_id is defined
+          - bootc_vm_name is defined
+          - bootc_page_title is defined
+        fail_msg: "Required variables not set"
+
+    - name: Gather running bootc instance information
+      oracle.oci.oci_compute_instance_facts:
+        compartment_id: "{{ oci_compartment_id }}"
+        display_name: "{{ bootc_vm_name }}"
+        region: "{{ oci_region }}"
+      register: all_instances
+
+    - name: Filter to only RUNNING instances with matching freeform tags
+      ansible.builtin.set_fact:
+        target_vms: >-
+          {{ all_instances.instances
+             | selectattr('lifecycle_state', 'eq', 'RUNNING')
+             | selectattr('freeform_tags.purpose', 'defined')
+             | selectattr('freeform_tags.purpose', 'eq', purpose)
+             | list }}
+
+    - name: Fail if no running instances were found
+      ansible.builtin.fail:
+        msg: "No running instance '{{ bootc_vm_name }}' found in compartment. Deploy it first."
+      when: target_vms | length == 0
+
+    # Collect public IPs for each matched instance
+    - name: Gather VNIC attachments for each instance
+      oracle.oci.oci_compute_vnic_attachment_facts:
+        compartment_id: "{{ oci_compartment_id }}"
+        instance_id: "{{ item.id }}"
+        region: "{{ oci_region }}"
+      register: vnic_attachments_list
+      loop: "{{ target_vms }}"
+      loop_control:
+        label: "{{ item.display_name }}"
+
+    - name: Gather VNIC details
+      oracle.oci.oci_network_vnic_facts:
+        vnic_id: "{{ item.vnic_attachments[0].vnic_id }}"
+        region: "{{ oci_region }}"
+      register: vnic_details_list
+      loop: "{{ vnic_attachments_list.results }}"
+      loop_control:
+        label: "{{ item.item.display_name }}"
+
+    - name: Build list of public IPs
+      ansible.builtin.set_fact:
+        bootc_public_ips: "{{ vnic_details_list.results | map(attribute='vnic.public_ip') | list }}"
+
+    - name: Perform test — GET the default web page for each instance
+      ansible.builtin.uri:
+        url: "http://{{ item }}"
+        method: GET
+        status_code: 200
+        return_content: true
+      register: default_page
+      loop: "{{ bootc_public_ips }}"
+      when: bootc_public_ips | length > 0
+
+    - name: Display pages
+      ansible.builtin.debug:
+        msg: "{{ default_page }}"
+
+    - name: Check for the site name supplied in config
+      ansible.builtin.fail:
+        msg: "Site Check Failed - could not access default web {{ bootc_page_title }}"
+      when: item.content is not search(bootc_page_title)
+      loop: "{{ default_page.results }}"
+
+    - name: Test results
+      ansible.builtin.debug:
+        msg: "All tests succeeded."

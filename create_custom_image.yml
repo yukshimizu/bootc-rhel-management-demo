@@ -1,0 +1,212 @@
+---
+# ---------------------------------------------------------------------------
+# create_custom_image.yml — Create an OCI Custom Image from the bootc container
+#                           image (OCI equivalent of create_ami.yml)
+#
+# Runs on the Builder VM. The bootc-image-builder tool is used to produce a
+# QCOW2 disk image, which is then uploaded to OCI Object Storage and imported
+# as a Custom Image in the specified compartment.
+#
+# Required collections:
+#   - oracle.oci  (oci_object_storage_object, oci_compute_image_*)
+#   - containers.podman
+# ---------------------------------------------------------------------------
+
+# Play 1 — runs on builder01: build QCOW2
+- name: Build QCOW2 disk image on builder01
+  hosts: tag_Name_builder01
+  gather_facts: false
+  become: true
+  remote_user: "{{ ansible_user }}"
+
+  vars:
+    bootc_image: "{{ bootc_remote_registry }}/{{ bootc_image_name }}:{{ bootc_image_tag }}"
+    bib_output_dir: "/var/tmp/bib-output"
+    bib_qcow2_path: "{{ bib_output_dir }}/qcow2/disk.qcow2"
+
+  tasks:
+    - name: Fail if required variables are not defined
+      ansible.builtin.assert:
+        that:
+          - oci_region is defined
+          - oci_compartment_id is defined
+          - oci_bootc_instance_image_name is defined
+          - oci_bucket_name is defined
+          - bootc_image is defined
+          - bootc_builder_image is defined
+          - rhsm_username is defined
+          - rhsm_passwd is defined
+          - registry_username is defined
+          - registry_passwd is defined
+        fail_msg: "Required variables not set"
+
+    - name: Ensure output directory exists
+      ansible.builtin.file:
+        path: "{{ bib_output_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Pull the bootc-image-builder image
+      containers.podman.podman_image:
+        name: "{{ bootc_builder_image }}"
+        force: true
+        username: "{{ rhsm_username }}"
+        password: "{{ rhsm_passwd }}"
+
+    - name: Pull the bootc container image
+      containers.podman.podman_image:
+        name: "{{ bootc_image }}"
+        force: true
+        username: "{{ registry_username }}"
+        password: "{{ registry_passwd }}"
+
+    - name: Build a QCOW2 disk image with bootc-image-builder
+      containers.podman.podman_container:
+        name: bootc-image-builder
+        detach: false
+        image: "{{ bootc_builder_image }}"
+        interactive: true
+        privileged: true
+        pull: "never"
+        rm: true
+        rmi: true
+        tty: true
+        volumes:
+          - "/var/lib/containers/storage:/var/lib/containers/storage"
+          - "{{ bib_output_dir }}:/output"
+        command: "--type qcow2 --local {{ bootc_image }}"
+        recreate: true
+        security_opt:
+          - "label=type:unconfined_t"
+
+    - name: Verify QCOW2 image was produced
+      ansible.builtin.stat:
+        path: "{{ bib_qcow2_path }}"
+      register: qcow2_stat
+
+    - name: Fail if QCOW2 was not produced
+      ansible.builtin.fail:
+        msg: "bootc-image-builder did not produce a QCOW2 at {{ bib_qcow2_path }}"
+      when: not qcow2_stat.stat.exists
+
+    - name: Stream QCOW2 from builder01 to AAP EE
+      ansible.builtin.shell:
+        cmd: >
+          ssh
+          -o StrictHostKeyChecking=no
+          -o UserKnownHostsFile=/dev/null
+          -o BatchMode=yes
+          {{ ansible_user }}@{{ ansible_host }}
+          "sudo cat {{ bib_qcow2_path }}"
+          > /tmp/{{ oci_bootc_instance_image_name }}.qcow2
+      delegate_to: localhost
+      become: false
+
+    - name: Clean up QCOW2 output directory on builder01
+      ansible.builtin.file:
+        path: "{{ bib_output_dir }}"
+        state: absent
+
+    - name: Add localhost to inventory for Play 2
+      ansible.builtin.add_host:
+        name: localhost
+        ansible_connection: local
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+
+# ---------------------------------------------------------------------------
+# Play 2 — runs on localhost: upload to OCI Object Storage and import
+# ---------------------------------------------------------------------------
+- name: Upload QCOW2 and create OCI Custom Image
+  hosts: all
+  gather_facts: false
+  become: false
+  run_once: true
+
+  vars:
+    local_qcow2_path: "/tmp/{{ oci_bootc_instance_image_name }}.qcow2"
+
+  pre_tasks:
+    - name: Setup OCI config
+      ansible.builtin.include_tasks: tasks/setup_oci_config.yml
+
+  post_tasks:
+    - name: Cleanup OCI config
+      ansible.builtin.include_tasks: tasks/cleanup_oci_config.yml
+
+    - name: Remove fetched QCOW2 from AAP execution environment
+      ansible.builtin.file:
+        path: "{{ local_qcow2_path }}"
+        state: absent
+      delegate_to: localhost
+
+  tasks:
+    - name: Check whether the Custom Image already exists
+      oracle.oci.oci_compute_image_facts:
+        compartment_id: "{{ oci_compartment_id }}"
+        display_name: "{{ oci_bootc_instance_image_name }}"
+        region: "{{ oci_region }}"
+      delegate_to: localhost
+      register: oci_image_info
+
+    - name: Report if the Custom Image already exists
+      ansible.builtin.debug:
+        msg:
+          - "The Custom Image already exists — skipping creation."
+          - "Image OCID: {{ oci_image_info.images[0].id }}"
+      when: oci_image_info.images | length > 0
+      delegate_to: localhost
+
+    - name: Create the OCI Custom Image
+      when: oci_image_info.images | length == 0
+      block:
+        - name: Upload QCOW2 to OCI Object Storage via OCI CLI
+          ansible.builtin.command:
+            cmd: >
+              oci os object put
+              --namespace "{{ oci_object_storage_namespace }}"
+              --bucket-name "{{ oci_bucket_name }}"
+              --name "{{ oci_bootc_instance_image_name }}.qcow2"
+              --file "{{ local_qcow2_path }}"
+              --region "{{ oci_region }}"
+              --config-file /root/.oci/config
+              --force
+          delegate_to: localhost
+          become: false
+          register: upload_result
+
+        - name: Show upload result
+          ansible.builtin.debug:
+            msg: "Upload completed: {{ upload_result.stdout }}"
+          delegate_to: localhost
+
+        - name: Import Custom Image from Object Storage
+          oracle.oci.oci_compute_image:
+            compartment_id: "{{ oci_compartment_id }}"
+            display_name: "{{ oci_bootc_instance_image_name }}"
+            image_source_details:
+              source_type: objectStorageTuple
+              namespace_name: "{{ oci_object_storage_namespace }}"
+              bucket_name: "{{ oci_bucket_name }}"
+              object_name: "{{ oci_bootc_instance_image_name }}.qcow2"
+              source_image_type: QCOW2
+            launch_mode: PARAVIRTUALIZED
+            region: "{{ oci_region }}"
+            state: present
+          delegate_to: localhost
+          register: custom_image
+
+        - name: Wait for Custom Image import to complete
+          oracle.oci.oci_compute_image_facts:
+            image_id: "{{ custom_image.image.id }}"
+            region: "{{ oci_region }}"
+          delegate_to: localhost
+          become: false
+          register: import_status
+          until: import_status.images[0].lifecycle_state == "AVAILABLE"
+          retries: 60
+          delay: 30
+
+        - name: Show the new Custom Image OCID
+          ansible.builtin.debug:
+            msg: "Custom Image OCID: {{ custom_image.image.id }}"
+          delegate_to: localhost

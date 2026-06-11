@@ -1,0 +1,149 @@
+---
+# ---------------------------------------------------------------------------
+# deploy_vm.yml — Deploy a bootc VM from an OCI Custom Image
+#                 (OCI equivalent of deploy_vm.yml)
+#
+# Runs from localhost (the Ansible Automation Controller).
+# Required collections:
+#   - oracle.oci
+# ---------------------------------------------------------------------------
+
+- name: Deploy a VM from the OCI Custom Image
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  pre_tasks:
+    - name: Setup OCI config
+      ansible.builtin.include_tasks: tasks/setup_oci_config.yml
+
+  post_tasks:
+    - name: Cleanup OCI config
+      ansible.builtin.include_tasks: tasks/cleanup_oci_config.yml
+
+  tasks:
+    - name: Fail if required variables are not defined
+      ansible.builtin.assert:
+        that:
+          - oci_region is defined
+          - oci_compartment_id is defined
+          - oci_availability_domain is defined
+          - oci_subnet_name is defined
+          - oci_bootc_instance_image_name is defined
+          - oci_bootc_instance_shape is defined
+          - oci_bootc_shape_config is defined
+          - oci_ssh_public_key is defined
+          - bootc_vm_name is defined
+          - bootc_vm_type is defined
+          - purpose is defined
+        fail_msg: "Required variables not set"
+
+    # -----------------------------------------------------------------------
+    # Idempotency check — skip if the instance already exists
+    # -----------------------------------------------------------------------
+    - name: Check if the bootc VM is already provisioned
+      oracle.oci.oci_compute_instance_facts:
+        compartment_id: "{{ oci_compartment_id }}"
+        display_name: "{{ bootc_vm_name }}"
+        region: "{{ oci_region }}"
+      register: existing_vms
+
+    - name: Filter to running/provisioning instances only
+      ansible.builtin.set_fact:
+        active_vms: >-
+          {{ existing_vms.instances | selectattr('lifecycle_state', 'in',
+             ['PROVISIONING', 'RUNNING', 'STARTING', 'STOPPING', 'STOPPED'])
+             | list }}
+
+    - name: Report existing VM
+      ansible.builtin.debug:
+        msg:
+          - "The instance looks like already provisioned. Please check the instance."
+          - "Instance OCID: {{ active_vms[0].id }}"
+          - "Private IP: {{ active_vms[0].primary_private_ip | default('N/A') }}"
+      when: active_vms | length > 0
+
+    # -----------------------------------------------------------------------
+    # Create the instance only when it does not already exist
+    # -----------------------------------------------------------------------
+    - name: Create the bootc VM
+      when: active_vms | length == 0
+      block:
+        - name: Resolve subnet OCID from display name
+          oracle.oci.oci_network_subnet_facts:
+            compartment_id: "{{ oci_compartment_id }}"
+            display_name: "{{ oci_subnet_name }}"
+            region: "{{ oci_region }}"
+          register: subnet_info
+
+        - name: Fail if the subnet was not found
+          ansible.builtin.fail:
+            msg: "Subnet '{{ oci_subnet_name }}' not found in compartment"
+          when: subnet_info.subnets | length == 0
+
+        - name: Save subnet OCID
+          ansible.builtin.set_fact:
+            oci_subnet_id: "{{ subnet_info.subnets[0].id }}"
+
+        - name: Resolve Custom Image OCID from display name
+          oracle.oci.oci_compute_image_facts:
+            compartment_id: "{{ oci_compartment_id }}"
+            display_name: "{{ oci_bootc_instance_image_name }}"
+            region: "{{ oci_region }}"
+          register: image_info
+
+        - name: Fail if the Custom Image was not found
+          ansible.builtin.fail:
+            msg: "Custom Image '{{ oci_bootc_instance_image_name }}' not found. Run create_custom_image.yml first."
+          when: image_info.images | length == 0
+
+        - name: Launch the OCI Compute instance
+          oracle.oci.oci_compute_instance:
+            compartment_id: "{{ oci_compartment_id }}"
+            display_name: "{{ bootc_vm_name }}"
+            availability_domain: "{{ oci_availability_domain }}"
+            shape: "{{ oci_bootc_instance_shape }}"
+            shape_config: "{{ oci_bootc_shape_config | default(omit) }}"
+            source_details:
+              source_type: image
+              image_id: "{{ image_info.images[0].id }}"
+              boot_volume_size_in_gbs: 50
+            create_vnic_details:
+              subnet_id: "{{ oci_subnet_id }}"
+              assign_public_ip: true
+            metadata:
+              ssh_authorized_keys: "{{ oci_ssh_public_key }}"
+            freeform_tags:
+              Name: "{{ bootc_vm_name }}"
+              type: "{{ bootc_vm_type }}"
+              purpose: "{{ purpose }}"
+            region: "{{ oci_region }}"
+            wait: true
+          register: new_instance
+
+        - name: Retrieve instance's VNIC for IP information
+          oracle.oci.oci_compute_vnic_attachment_facts:
+            compartment_id: "{{ oci_compartment_id }}"
+            instance_id: "{{ new_instance.instance.id }}"
+            region: "{{ oci_region }}"
+          register: vnic_attachments
+
+        - name: Get VNIC details
+          oracle.oci.oci_network_vnic_facts:
+            vnic_id: "{{ vnic_attachments.vnic_attachments[0].vnic_id }}"
+            region: "{{ oci_region }}"
+          register: vnic_info
+
+        - name: Output new VM IP addresses
+          ansible.builtin.debug:
+            msg:
+              - "Public IP for new instance: {{ vnic_info.vnic.public_ip | default('N/A') }}"
+              - "Private IP for new instance: {{ vnic_info.vnic.private_ip | default('N/A') }}"
+
+        - name: Wait for SSH to become available
+          ansible.builtin.wait_for:
+            delay: 60
+            host: "{{ vnic_info.vnic.public_ip }}"
+            port: 22
+            state: started
+            timeout: 300

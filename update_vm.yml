@@ -3,7 +3,7 @@
   hosts: "{{ target_host }}"
   gather_facts: false
   become: true
-  remote_user: cloud-user
+  remote_user: "{{ ansible_user }}"
 
   tasks:
     - name: Fail if variables not defined
@@ -12,7 +12,6 @@
           - bootc_remote_registry is defined
           - bootc_image_name is defined
           - bootc_image_tag is defined
-          - bootc_page_title is defined
 
         fail_msg: "Required variables not set"
 

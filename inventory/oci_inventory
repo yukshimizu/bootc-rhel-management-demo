@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+OCI_WORKDIR="$(mktemp -d)"
+trap 'rm -rf "$OCI_WORKDIR"' EXIT
+
+OCI_CONFIG_FILE="$OCI_WORKDIR/config"
+OCI_INVENTORY_FILE="$OCI_WORKDIR/oci_inventory.oci.yml"
+
+# OCI_KEY_FILE is injected by AAP via the file injector — verify it looks valid
+if ! grep -q "BEGIN.*PRIVATE KEY" "$OCI_KEY_FILE"; then
+  echo "ERROR: Private key file does not look valid at $OCI_KEY_FILE" >&2
+  head -3 "$OCI_KEY_FILE" >&2
+  exit 1
+fi
+
+# Write the OCI config file
+cat > "$OCI_CONFIG_FILE" <<EOF
+[DEFAULT]
+user=${OCI_USER}
+fingerprint=${OCI_FINGERPRINT}
+tenancy=${OCI_TENANCY}
+region=${OCI_REGION}
+key_file=${OCI_KEY_FILE}
+EOF
+
+# Write the inventory plugin file with resolved variables
+cat > "$OCI_INVENTORY_FILE" <<EOF
+plugin: oracle.oci.oci
+
+regions:
+  - ${OCI_REGION}
+
+compartments:
+  - compartment_ocid: ${OCI_COMPARTMENT_ID}
+    fetch_hosts_from_subcompartments: true
+
+include_host_filters:
+  - "lifecycle_state == 'RUNNING'"
+
+compose:
+  ansible_host: "public_ip if public_ip else private_ip"
+  instance_ocid: id
+  instance_name: display_name
+
+keyed_groups:
+  - prefix: tag
+    key: freeform_tags
+
+enable_parallel_processing: true
+EOF
+
+export OCI_CONFIG_FILE
+
+exec ansible-inventory \
+  -i "$OCI_INVENTORY_FILE" \
+  --list \
+  --export

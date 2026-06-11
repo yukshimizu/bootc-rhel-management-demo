@@ -1,0 +1,18 @@
+---
+# tasks/cleanup_oci_config.yml
+# Include this at the end of every play that uses oracle.oci.* modules
+# via: ansible.builtin.include_tasks: tasks/cleanup_oci_config.yml
+
+- name: Remove ~/.oci/config
+  ansible.builtin.file:
+    path: "/root/.oci/config"
+    state: absent
+  delegate_to: localhost
+  become: false
+
+- name: Remove ~/.oci directory
+  ansible.builtin.file:
+    path: "/root/.oci"
+    state: absent
+  delegate_to: localhost
+  become: false

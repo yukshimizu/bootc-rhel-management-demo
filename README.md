@@ -1,44 +1,71 @@
 # bootc-rhel-management-demo
-This repo includes ansible playbooks for a demo project of managing RHEL bootc images with Red Hat Ansible Automation Platform on AWS EC2.
+This repo includes ansible playbooks for a demo project of managing RHEL bootc images with Red Hat Ansible Automation Platform.
 
 ## Automating image mode for RHEL with Red Hat Ansible Automation Platform
 The goal behind the code is to demonstrate a simple example for automating 
 build, test, and deploy operating systems by using image mode for RHEL with Ansible Automation Platform.
 
 ## Assumed demo environment
-The assumed environment can be set up on AWS EC2 easily by using playbooks and roles in the [bootc-rhel-management-setup](https://github.com/yukshimizu/bootc-rhel-management-setup) paired repo.
+The assumed environment can be set up on AWS EC2 or OCI easily by using playbooks and roles in the [bootc-rhel-management-setup](https://github.com/yukshimizu/bootc-rhel-management-setup) paired repo.
 
 ## Included contents
 ### Playbooks
-|Name     |Description|
-|:--------|:----------|
-|`build_image.yml`|Build a new container image and push it to remote registry.|
-|`create_ami.yml`|Create an AMI image and upload it to AWS.|
-|`deploy_vm.yml`|Deploy the container image on EC2 as a VM.|
-|`test_app.yml`|Test the application of the VM.|
-|`update_vm.yml`|Update the VM and reboot it.|
-|`deregister_ami.yml`|Deregister the AMI.|
+|Name     |Description|Target  |
+|:--------|:----------|:-------|
+|`build_image.yml`|Build a new container image and push it to remote registry.|both|
+|`create_ami.yml`|Create an AMI image and upload it to AWS.|aws|
+|`create_custom_image.yml`|Create a QCOW2 image and import it as OCI Custom Image.|oci|
+|`deploy_vm_aws.yml`|Deploy the container image on EC2 as a VM.|aws|
+|`deploy_vm_oci.yml`|Deploy the container image on OCI as a VM.|oci|
+|`test_app_aws.yml`|Test the application of the VM on EC2.|aws|
+|`test_app_oci.yml`|Test the application of the VM on OCI.|oci|
+|`update_vm.yml`|Update the VM and reboot it.|both|
+|`deregister_ami.yml`|Deregister the AMI.|aws|
+|`delete_custom_image.yml`|Delete the OCI Custom Image.|oci|
 
 ### Group variables
 These variables have already been set as follows, corresponding to the setup by [bootc-rhel-management-setup](https://github.com/yukshimizu/bootc-rhel-management-setup). You can adjust them based on your environment.
 ```
 ---
-aws_region: ap-northeast-1 # needs to be aligned with your environment's creation
-aws_bootc_instance_ami: rhel9-bootc-x86 # adjust with your preference
-aws_bootc_instance_size: t2.small # can be bigger instance size
-aws_s3_bucket: rhel9-bootc # needs to be aligned with your environment's creation
-aws_vpc: demo_vpc # needs to be aligned with your environment's creation
-aws_vpc_subnet_name: demo_subnet # needs to be aligned with your environment's creation
-aws_securitygroup_name: demo_sg # needs to be aligned with your environment's creation
-
+# ---- Common ----
 purpose: demo # should not be modified
 
-bootc_build_dir: "/home/ec2-user/bootc" # should not be modified
+# ---- bootc VM ----
 bootc_test_container: "rhel9-bootc" # adjust with your preference
-bootc_builder_image: "registry.redhat.io/rhel9/bootc-image-builder:latest" # should not be modified
+bootc_builder_image: "registry.redhat.io/rhel9/bootc-image-builder:9.4" # should not be modified
 bootc_vm_type: bootc # should not be modified
 bootc_vm_name: bootc01 # should not be modified
-bootc_vm_environment: apdb # should not be modified
+
+# ---- OCI Identity ----
+oci_availability_domain: hoge:AP-TOKYO-1-AD-1     # REQUIRED: e.g. "IyFQ:AP-TOKYO-1-AD-1"
+
+# ---- Object Storage (replaces S3) ----
+oci_bucket_name: rhel9-bootc
+oci_dynamic_group_name: bootc-builders
+oci_policy_name: bootc-object-storage-policy
+
+# ---- OCI Network ----
+oci_vcn_name: demo_vcn
+oci_subnet_name: demo_subnet
+
+# ---- OCI Instance ----
+oci_bootc_instance_image_name: rhel9-bootc-x86
+oci_bootc_instance_shape: VM.Standard.E5.Flex
+oci_bootc_shape_config:
+  ocpus: 1
+  memory_in_gbs: 8
+
+bootc_build_dir: "/home/cloud-user/bootc" # should be modified from cloud-user to ec2-user for AWS
+ansible_user: cloud-user # should be modified from cloud-user to ec2-user for AWS
+
+# ---- AWS ----
+# aws_region: ap-northeast-1 # needs to be aligned with your environment's creation
+# aws_bootc_instance_ami: rhel9-bootc-x86 # adjust with your preference
+# aws_bootc_instance_size: t2.small # can be bigger instance size
+# aws_s3_bucket: rhel9-bootc # needs to be aligned with your environment's creation
+# aws_vpc: demo_vpc # needs to be aligned with your environment's creation
+# aws_vpc_subnet_name: demo_subnet # needs to be aligned with your environment's creation
+# aws_securitygroup_name: demo_sg # needs to be aligned with your environment's creation
 ```
 
 ## Installation and usage
@@ -47,7 +74,20 @@ Assuming the demo environement has been already created by the way of before men
 ### Manually
 Ensure that you are logged in to your Ansible Automation Controller before proceeding with the following steps.
 
-### Create credentials
+### Create a project
+1. Click `Projects` in the left menu.
+2. Click `Add` button.
+3. Enter the following fields:
+   - Name: `RHEL_Bootc_Demo`
+   - Organization: `Default` (or your prefered organization)
+   - Source Control Type: `Git`
+   - Source Control URL: your git repositoriy
+   - Options: `Update Revision on Launch`
+4. Click `Save` button
+
+Please refer to [Ansible Doc](https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.6/develop-proc_controller_adding_a_project) for more details.
+
+### Create credentials for AWS
 At leaset the following two credentails need to be defined.
 
 #### Credential for AWS
@@ -60,7 +100,7 @@ At leaset the following two credentails need to be defined.
    - Secret Key: your AWS_SECRET_ACCESS_KEY
 4. Click `Save` button.
 
-Please refer to [Ansible Doc](https://docs.ansible.com/automation-controller/latest/html/userguide/credentials.html#amazon-web-services) for more details.
+Please refer to [Ansible Doc](https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.6/secure-ref_controller_credential_aws) for more details.
 
 #### Credential for ssh to AWS instances
 1. Click `Credentials` in the left menu.
@@ -71,9 +111,10 @@ Please refer to [Ansible Doc](https://docs.ansible.com/automation-controller/lat
    - SSH Private Key: your AWS private key
 4. Click `Save` button.
 
-Please refer to [Ansible Doc](https://docs.ansible.com/automation-controller/latest/html/userguide/credentials.html#machine) for more details.
+### Create credentials for OCI
+Comming soon.
 
-### Create inventories
+### Create inventories for AWS
 1. Click `Inventories` in the left menu.
 2. Click `Add` button and select `Add inventory`.
 3. Enter the following fields:
@@ -109,22 +150,11 @@ Please refer to [Ansible Doc](https://docs.ansible.com/automation-controller/lat
    ```
 7. Click `Save` button.
 
-### Create a project
-1. Click `Projects` in the left menu.
-2. Click `Add` button.
-3. Enter the following fields:
-   - Name: `RHEL_Bootc_Demo`
-   - Organization: `Default` (or your prefered organization)
-   - Execution Environment: `Default execution environment`
-   - Source Control Type: `Git`
-   - Source Control URL: your git repositoriy
-   - Options: `Update Revision on Launch`
-4. Click `Save` button
+### Create inventories for OCI
+Comming soon.
 
-Please refer to [Ansible Doc](https://docs.ansible.com/automation-controller/latest/html/userguide/projects.html#add-a-new-project) for more details.
-
-### Create job templates
-Each job template is equivalent to a playbook in this repository. Repeat these steps for each template/playbook that you want to use and change the variables specific to the individual playbook. Please refer to [Ansible Doc](https://docs.ansible.com/automation-controller/latest/html/userguide/job_templates.html) for more details.
+### Create job templates for AWS
+Each job template is equivalent to a playbook in this repository. Repeat these steps for each template/playbook that you want to use and change the variables specific to the individual playbook. Please refer to [Ansible Doc](https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.6/develop-proc_controller_create_job_template#controller-create-job-template_procedure) for more details.
 
 1. Click `Templates` in the left menu.
 2. Click `Add` button and select `Add job template`.
@@ -224,8 +254,11 @@ Each job template is equivalent to a playbook in this repository. Repeat these s
 - Playbook: `deregister_ami.yml`
 - Credentials: `aws_cred`
 
+### Create job templates for OCI
+Comming soon.
+
 ### Create workflow templates
-Above job templates are acutually configured as separate workflow templates for initial creation and for updates respectively. Follow the next steps for each environment. Please refer to [Ansible Doc](https://docs.ansible.com/automation-controller/latest/html/userguide/workflow_templates.html) for more details.
+Above job templates are acutually configured as separate workflow templates for initial creation and for updates respectively. Follow the next steps for each environment. Please refer to [Ansible Doc](https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.6/develop-proc_controller_create_workflow_template#controller-create-workflow-template_about-this-task) for more details.
 
 #### Create the Bootc Instance
 

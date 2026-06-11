@@ -10,7 +10,6 @@
         that:
           - aws_region is defined
           - bootc_vm_name is defined
-          - bootc_vm_environment is defined
           - bootc_page_title is defined
 
         fail_msg: "Required variables not set"
@@ -20,7 +19,6 @@
         filters:
           "tag:purpose": "{{ purpose }}"
           "tag:Name": "{{ bootc_vm_name }}"
-          "tag:environment": "{{ bootc_vm_environment }}"
           instance-state-name:
             - running
         region: "{{ aws_region }}"

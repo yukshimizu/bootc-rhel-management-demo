@@ -1,17 +1,40 @@
 ---
-aws_region: ap-northeast-1 # needs to be aligned with your environment's creation
-aws_bootc_instance_ami: rhel9-bootc-x86 # adjust with your preference
-aws_bootc_instance_size: t2.small # can be bigger instance size
-aws_s3_bucket: rhel9-bootc # needs to be aligned with your environment's creation
-aws_vpc: demo_vpc # needs to be aligned with your environment's creation
-aws_vpc_subnet_name: demo_subnet # needs to be aligned with your environment's creation
-aws_securitygroup_name: demo_sg # needs to be aligned with your environment's creation
-
+# ---- Common ----
 purpose: demo # should not be modified
 
-bootc_build_dir: "/home/ec2-user/bootc" # should not be modified
+# ---- bootc VM ----
 bootc_test_container: "rhel9-bootc" # adjust with your preference
-bootc_builder_image: "registry.redhat.io/rhel9/bootc-image-builder:latest" # should not be modified
+bootc_builder_image: "registry.redhat.io/rhel9/bootc-image-builder:9.4" # should not be modified
 bootc_vm_type: bootc # should not be modified
 bootc_vm_name: bootc01 # should not be modified
-bootc_vm_environment: apdb # should not be modified
+
+# ---- OCI Identity ----
+oci_availability_domain: hoge:AP-TOKYO-1-AD-1     # REQUIRED: e.g. "IyFQ:AP-TOKYO-1-AD-1"
+
+# ---- Object Storage (replaces S3) ----
+oci_bucket_name: rhel9-bootc
+oci_dynamic_group_name: bootc-builders
+oci_policy_name: bootc-object-storage-policy
+
+# ---- OCI Network ----
+oci_vcn_name: demo_vcn
+oci_subnet_name: demo_subnet
+
+# ---- OCI Instance ----
+oci_bootc_instance_image_name: rhel9-bootc-x86
+oci_bootc_instance_shape: VM.Standard.E5.Flex
+oci_bootc_shape_config:
+  ocpus: 1
+  memory_in_gbs: 8
+
+bootc_build_dir: "/home/cloud-user/bootc" # should be modified from cloud-user to ec2-user for AWS
+ansible_user: cloud-user # should be modified from cloud-user to ec2-user for AWS
+
+# ---- AWS ----
+# aws_region: ap-northeast-1 # needs to be aligned with your environment's creation
+# aws_bootc_instance_ami: rhel9-bootc-x86 # adjust with your preference
+# aws_bootc_instance_size: t2.small # can be bigger instance size
+# aws_s3_bucket: rhel9-bootc # needs to be aligned with your environment's creation
+# aws_vpc: demo_vpc # needs to be aligned with your environment's creation
+# aws_vpc_subnet_name: demo_subnet # needs to be aligned with your environment's creation
+# aws_securitygroup_name: demo_sg # needs to be aligned with your environment's creation

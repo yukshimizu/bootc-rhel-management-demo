@@ -1,0 +1,26 @@
+---
+# tasks/setup_oci_config.yml
+# Include this at the start of every play that uses oracle.oci.* modules
+# via: ansible.builtin.include_tasks: tasks/setup_oci_config.yml
+
+- name: Ensure ~/.oci directory exists
+  ansible.builtin.file:
+    path: "/root/.oci"
+    state: directory
+    mode: '0700'
+  delegate_to: localhost
+  become: false
+
+- name: Write ~/.oci/config from injected credentials
+  ansible.builtin.copy:
+    dest: "/root/.oci/config"
+    mode: '0600'
+    content: |
+      [DEFAULT]
+      user={{ lookup('env', 'OCI_USER') }}
+      fingerprint={{ lookup('env', 'OCI_FINGERPRINT') }}
+      tenancy={{ lookup('env', 'OCI_TENANCY') }}
+      region={{ lookup('env', 'OCI_REGION') }}
+      key_file={{ lookup('env', 'OCI_KEY_FILE') }}
+  delegate_to: localhost
+  become: false
