@@ -162,7 +162,7 @@ At leaset the following three credentails need to be defined. Go to Automation E
    - API Private Key: contents of your PEM private key
    - Compartment OCID: OCID of your compartment
    - Object Storage Namespace: result of `oci os ns get`
-   - Region:
+   - Region: your OCI region
 4. Click `Save credential` button.
 
 ### Credential for ssh to OCI instances
@@ -402,4 +402,4 @@ NOTE: Although `xxx_passwd` should be encrypted in production, using vault for e
         - Type: password
         - Answer variable name: `registry_passwd`
 
-NOTE: Before running the workflow for update, **your image repository needs to be marked as public**.
+NOTE: Before running the workflow for update, **your image registry needs to be marked as public**.

@@ -280,4 +280,4 @@ NOTE: Although `xxx_passwd` should be encrypted in production, using vault for e
         - Type: password
         - Answer variable name: `registry_passwd`
 
-NOTE: Before running the workflow for update, **your image repository needs to be marked as public**.
+NOTE: Before running the workflow for update, **your image registry needs to be marked as public**.
