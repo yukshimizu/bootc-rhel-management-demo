@@ -2,6 +2,5 @@
 collections:
 #  - name: amazon.aws          # For AWS
   - name: oracle.oci          # For OCI
-    version: ">=4.0.0"
   - name: containers.podman
   - name: community.general
